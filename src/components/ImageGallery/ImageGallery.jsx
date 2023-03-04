@@ -2,7 +2,7 @@ import { ImageGalleryItem } from "components/ImageGalleryItem";
 import PropTypes from 'prop-types';
 import css from './ImageGallery.module.css';
 
-export function ImageGallery({ images }) {  
+export function ImageGallery({ images }) {
   return (
     <ul className={css.ImageGallery}>
       {images.map(image => (

@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Searchbar } from './Searchbar';
 import { ImageGallery } from './ImageGallery';
 import { Button } from './Button';
@@ -18,163 +18,156 @@ const Status = {
 };
 
 const ToastOptions = {
-  autoClose: 2000,
+  autoClose: 1500,
   pauseOnFocusLoss: true,
   transition: Flip,
 };
 
-let page = 1;
-
-export class App extends Component {
-  state = {
-    searchQuery: '',
-    images: [],    
-    totalHits: 0,
-    status: Status.IDLE,
-    error: null,
-    isLoading: false,
-  };
-
-  componentDidUpdate(_, prevState) {
-    const { searchQuery, page } = this.state;    
-    
-    if (prevState.searchQuery !== searchQuery || prevState.page !== page) {
-      this.getImagesFetch(searchQuery, page);
-    };
-  };
-
-  getImagesFetch = async (searchQuery, page) => {
-    this.setState({ isLoading: true });    
-
-    try {      
-      const { totalHits, hits } = await pixabayApi.fetchPixabayPhoto(searchQuery, page);
-      
-      if (hits.length === 0) {
-        setTimeout(() => {
-          toast.warning('Sorry, there are no images matching your search query.', ToastOptions);
-        }, 100)
-        return this.setState({ status: Status.IDLE });        
+export function App() {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [images, setImages] = useState([]);
+  const [totalHits, setTotalHits] = useState(0);
+  const [status, setStatus] = useState(Status.IDLE);
+  const [error, setError] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  
+  useEffect(() => {    
+    const getImagesFetch = async () => {
+      if (!searchQuery) {
+        return;
       }
 
-      if (hits.length > 0) {        
-        this.setState(prevState => ({          
-          images: [...prevState.images, ...hits],    
-          status: Status.RESOLVED,
-          totalHits,
-        }));        
-        
-        setTimeout(() => {
-          const { images } = this.state;          
-          toast.success(`Total ${totalHits} / Displayed ${images.length}`, ToastOptions);
-        }, 100);        
-      };      
-    } catch (error) {
-      if (error.message.length < 25) {
-        toast.error(`Something went wrong... Details: ${error.message}`, ToastOptions);
-      } else {
-        this.setState({ error, status: Status.REJECTED });
-      };
-    } finally {
-      this.setState({ isLoading: false });
-    };
-  };
+      setIsLoading(true);      
+  
+      try {      
+        const { totalHits, hits } = await pixabayApi.fetchPixabayPhoto(searchQuery, page);        
 
-  handleSearchFormSubmit = (searchQuery) => {    
+        if (hits.length === 0) {
+          setTimeout(() => {
+            toast.warning('Sorry, there are no images matching your search query.', ToastOptions);
+          }, 100)
+          return setStatus(Status.IDLE);        
+        }
+
+        if (hits.length > 0) {   
+          setImages(prevState => [...prevState, ...hits]);
+          setStatus(Status.RESOLVED);
+          setTotalHits(totalHits);          
+        };
+      } catch (error) {
+        if (error.message.length < 25) {
+          toast.error(`Something went wrong... Details: ${error.message}`, ToastOptions);
+        } else {
+          setError(error);
+          setStatus(Status.REJECTED);        
+        };
+      } finally {
+        setIsLoading(false);      
+      };
+    };    
+
+    getImagesFetch();
+  }, [page, searchQuery]);  
+
+  useEffect(() => {
+    if (images.length > 0) { 
+      setTimeout(() => { 
+        toast.success(`Total ${totalHits} / Displayed ${images.length}`, ToastOptions);
+      }, 100); 
+    };
+  }, [images.length, totalHits]);  
+
+  const handleSearchFormSubmit = ({ searchQuery }) => {    
     if (searchQuery.trim() === '') {
       setTimeout(() => {
         toast.info('Your query is empty, please enter data to search.', ToastOptions);
       }, 100)
-      return this.setState({ status: Status.IDLE });   
+      return setStatus(Status.IDLE);   
     };
 
-    this.setState({
-      searchQuery,
-      images: [],
-      page: 1,
-      status: Status.PENDING,
-    })    
+    setSearchQuery(searchQuery);
+    setImages([]);
+    setPage(1);
+    setStatus(Status.PENDING);    
   };
 
-  onloadMore = () => {      
-    this.setState(prevState => ({ page: prevState.page + 1, }));
-    this.scrollGalleryOnLoadMoreBtn();
+  const onloadMore = () => {    
+    setPage(prevState => prevState + 1);    
+    scrollGalleryOnLoadMoreBtn();
   };
 
-  scrollGalleryOnLoadMoreBtn = () => {
+  const scrollGalleryOnLoadMoreBtn = () => {
     scroll.scrollToBottom();
+  };    
+
+  // IDLE
+  if (status === 'idle') {
+    return (
+      <div className={css.App}>
+        <div className={css.SearchbarBox} style={{ backgroundColor: getRandomHexColor() }}>
+          <Searchbar onSubmit={handleSearchFormSubmit} />
+        </div>
+        
+        <ToastContainer />
+      </div>
+    )
+  };    
+
+  // PENDING
+  if (status === 'pending') {      
+    return (
+      <div className={css.App}>
+        <div className={css.SearchbarBox} style={{ backgroundColor: getRandomHexColor() }}>
+          <Searchbar onSubmit={handleSearchFormSubmit} />            
+        </div>          
+        
+        <ImageGallery images={images} page={page} />                 
+        
+        {isLoading
+            ? <Loader />
+            : <Button onloadMore={onloadMore} />}          
+        
+        <ToastContainer />
+      </div>
+    )
+  };    
+  
+  // RESOLVED
+  if (status === 'resolved') {      
+    return (
+      <div className={css.App}>
+        <div className={css.SearchbarBox} style={{ backgroundColor: getRandomHexColor() }}>
+          <Searchbar onSubmit={handleSearchFormSubmit} />           
+        </div> 
+
+        {isLoading && <Loader />}
+
+        <ImageGallery images={images} page={page} />          
+
+        {totalHits > per_page && totalHits > images.length && (
+          !isLoading && <Button onloadMore={onloadMore} />
+        )}
+        
+        <ToastContainer />
+      </div>
+    )
   };
-
-  render() {
-    const { status, error, images, totalHits } = this.state;
-
-    // IDLE
-    if (status === 'idle') {
-      return (
-        <div className={css.App}>
-          <div className={css.SearchbarBox} style={{ backgroundColor: getRandomHexColor() }}>
-            <Searchbar onSubmit={this.handleSearchFormSubmit} />
-          </div>
-          
-          <ToastContainer />
+  
+  // REJECTED
+  if (status === 'rejected') {
+    return (
+      <div className={css.App}>
+        <div className={css.SearchbarBox} style={{ backgroundColor: getRandomHexColor() }}>
+          <Searchbar onSubmit={handleSearchFormSubmit} />
         </div>
-      )
-    };    
 
-    // PENDING
-    if (status === 'pending') {      
-      return (
-        <div className={css.App}>
-          <div className={css.SearchbarBox} style={{ backgroundColor: getRandomHexColor() }}>
-            <Searchbar onSubmit={this.handleSearchFormSubmit} />            
-          </div>          
-          
-          <ImageGallery images={images} page={page} />                 
-          
-          {this.state.isLoading
-              ? <Loader />
-              : <Button onloadMore={this.onloadMore} />}          
-          
-          <ToastContainer />
+        <div className={css.ErrorMessage}>
+          <p>{`${error}. Please try again later.`}</p>            
         </div>
-      )
-    };    
-    
-    // RESOLVED
-    if (status === 'resolved') {      
-      return (
-        <div className={css.App}>
-          <div className={css.SearchbarBox} style={{ backgroundColor: getRandomHexColor() }}>
-            <Searchbar onSubmit={this.handleSearchFormSubmit} />           
-          </div> 
 
-          {this.state.isLoading && <Loader />}
-
-          <ImageGallery images={images} page={page} />          
-
-          {totalHits > per_page && totalHits > images.length && (
-            !this.state.isLoading && <Button onloadMore={this.onloadMore} />
-          )}
-          
-          <ToastContainer />
-        </div>
-      )
-    };
-    
-    // REJECTED
-    if (status === 'rejected') {
-      return (
-        <div className={css.App}>
-          <div className={css.SearchbarBox} style={{ backgroundColor: getRandomHexColor() }}>
-            <Searchbar onSubmit={this.handleSearchFormSubmit} />
-          </div>
-
-          <div className={css.ErrorMessage}>
-            <p>{`${error}. Please try again later.`}</p>            
-          </div>
-
-          <ToastContainer />
-        </div>
-      )
-    };
-  };
+        <ToastContainer />
+      </div>
+    )
+  };  
 };
